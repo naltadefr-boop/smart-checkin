@@ -174,7 +174,7 @@ async function readCard() {
     for (const [k, v] of Object.entries(r.data)) ui.draft[k] = v;
     ui.auto = r.auto; ui.doubt = r.doubt;
     const n = Object.keys(r.auto).length;
-    toast(n ? `${n} informations lues sur la carte${r.mrzFound ? '' : ' (zone MRZ non trouvée : vérifiez bien chaque champ)'}.` : 'Rien de lisible : reprenez une photo plus nette, bien éclairée, ou saisissez la fiche.', 6000);
+    toast(n ? `${n} informations lues sur la carte${r.mrzFound ? '' : ' (lignes <<< non trouvées : photographiez de plus près, sans ombre, ou complétez les champs)'}.` : 'Rien de lisible : reprenez une photo plus nette, bien éclairée, ou saisissez la fiche.', 6000);
     ui.step = 2; render();
   } catch (e) {
     console.error(e); note.className = 'note w';

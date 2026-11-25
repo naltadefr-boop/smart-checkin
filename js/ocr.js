@@ -24,11 +24,29 @@ export function warmUp() { getWorker().catch(() => {}); }
 function loadImage(file) {
   return new Promise((res, rej) => { const u = URL.createObjectURL(file); const i = new Image(); i.onload = () => { URL.revokeObjectURL(u); res(i); }; i.onerror = () => { URL.revokeObjectURL(u); rej(new Error('image')); }; i.src = u; });
 }
+function rotate(img, deg) {
+  if (!deg) return img; const q = deg % 180 !== 0, c = document.createElement('canvas');
+  c.width = q ? img.height : img.width; c.height = q ? img.width : img.height;
+  const x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.rotate(deg * Math.PI / 180); x.drawImage(img, -img.width / 2, -img.height / 2); return c;
+}
+// noir et blanc avec un seuil local : résiste aux ombres et aux fonds colorés
+function adaptive(c) {
+  const x = c.getContext('2d', { willReadFrequently: true }), W = c.width, H = c.height, d = x.getImageData(0, 0, W, H), p = d.data, S = new Float64Array((W + 1) * (H + 1));
+  for (let j = 0; j < H; j++) { let r = 0; for (let i = 0; i < W; i++) { r += p[(j * W + i) * 4]; S[(j + 1) * (W + 1) + i + 1] = S[j * (W + 1) + i + 1] + r; } }
+  const R = Math.max(12, Math.round(W / 60)), out = new Uint8Array(W * H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const a = Math.max(0, i - R), b = Math.min(W, i + R + 1), t = Math.max(0, j - R), e = Math.min(H, j + R + 1);
+    const m = (S[e * (W + 1) + b] - S[t * (W + 1) + b] - S[e * (W + 1) + a] + S[t * (W + 1) + a]) / ((b - a) * (e - t));
+    out[j * W + i] = p[(j * W + i) * 4] < m - 14 ? 0 : 255;
+  }
+  for (let k = 0; k < out.length; k++) p[k * 4] = p[k * 4 + 1] = p[k * 4 + 2] = out[k];
+  x.putImageData(d, 0, 0); return c;
+}
 // redimensionne, passe en niveaux de gris et étire le contraste
 function prep(img, maxSide, crop, binarize) {
   const sx = crop ? crop.x * img.width : 0, sy = crop ? crop.y * img.height : 0;
   const sw = crop ? crop.w * img.width : img.width, sh = crop ? crop.h * img.height : img.height;
-  const s = Math.min(1.6, maxSide / Math.max(sw, sh));
+  const s = Math.min(crop && crop.up ? 4 : 1.6, maxSide / Math.max(sw, sh));
   const c = document.createElement('canvas'); c.width = Math.round(sw * s); c.height = Math.round(sh * s);
   const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, sx, sy, sw, sh, 0, 0, c.width, c.height);
   const d = x.getImageData(0, 0, c.width, c.height), p = d.data, hist = new Array(256).fill(0);
@@ -75,7 +93,7 @@ function names(s) {
 }
 function cleanLine(l) { return l.toUpperCase().replace(/[«‹(\[{]/g, '<').replace(/\s+/g, '').replace(/[^A-Z0-9<]/g, ''); }
 export function parseMRZ(text) {
-  const lines = text.split(/\n/).map(cleanLine).filter(l => l.length >= 26 && (l.match(/</g) || []).length >= 2);
+  const lines = text.split(/\n/).map(cleanLine).filter(l => l.length >= 26);
   const fit = (l, n) => (l + '<'.repeat(n)).slice(0, n);
   const out = { _checks: 0, _ok: 0 };
   const chk = (f, d) => { out._checks++; const r = ok(f, d); if (r) out._ok++; return r; };
@@ -114,6 +132,23 @@ export function parseMRZ(text) {
       return out;
     }
   }
+  return parsePartial(text);
+}
+// Secours : lignes MRZ lues séparément. La ligne des dates n'est acceptée que si ses deux chiffres de contrôle sont justes.
+function parsePartial(text) {
+  const lines = text.split(/\n/).map(cleanLine).filter(l => l.length >= 14), D = '[0-9OQDILZSBGT]';
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(new RegExp('(' + D + '{6})(' + D + ')([MF<])(' + D + '{6})(' + D + ')'));
+    if (!m) continue;
+    const b = toNum(m[1]), e = toNum(m[4]); if (!ok(b, toNum(m[2])) || !ok(e, toNum(m[5])) || !mrzDate(b, 'birth') || !mrzDate(e)) continue;
+    const out = { _checks: 2, _ok: 2, nom: '', prenoms: '', type: '', numPiece: '', numSure: false, etat: '', dateNaiss: mrzDate(b, 'birth'), naissSure: true, sexe: m[3] === '<' ? '' : m[3], dateExp: mrzDate(e), expSure: true, nat: '' };
+    const after = toAlpha(lines[i].slice(m.index + m[0].length, m.index + m[0].length + 3)), before = toAlpha(lines[i].slice(Math.max(0, m.index - 3), m.index));
+    out.nat = NAT[after] ? after : NAT[before] ? before : '';
+    const nl = lines.find((l, j) => j !== i && /^[A-Z0-9<]*[A-Z]{2,}<<[A-Z]/.test(l) && (l.match(/\d/g) || []).length <= 3);
+    if (nl) Object.assign(out, names(nl.replace(/^P[A-Z<][A-Z]{3}(?=[A-Z]+<)/, '')));
+    for (const l of lines) { const t = l.match(/^([IAC])[A-Z<]([A-Z]{3})([A-Z0-9<]{9})([0-9])/); if (!t) continue; const dn = fixDocNum(t[3], t[4]); if (dn.sure) { out.type = 'CNI'; out.numPiece = dn.v.replace(/</g, ''); out.numSure = true; out._checks++; out._ok++; } break; }
+    return out;
+  }
   return null;
 }
 
@@ -150,6 +185,7 @@ function parseVIZ(text) {
     while ((m = g.exec(n))) cut = m.index + m[0].length;
     let v = raw.slice(cut).replace(/^[\s:;/|.\-_]+/, '').replace(/[|]/g, '').trim();
     v = v.replace(new RegExp('^(' + ANY_LABEL.source + ')[\\s:/]*', 'i'), '').trim();
+    v = v.replace(/^(du|de la|de l['’])\s*(titulaire|porteur|porteuse)\b[\s:/.\-]*/i, '').replace(/^of (the )?(holder|bearer)\b[\s:/.\-]*/i, '').trim();
     if (v.length >= 2 && !ANY_LABEL.test(norm(v))) return v;
     for (let j = i + 1; j < Math.min(lines.length, i + 3); j++) { if (!ANY_LABEL.test(N[j]) || /\d{1,2}[./]\d{1,2}[./]\d{4}/.test(N[j])) return lines[j].replace(/^[\s:;/|.\-]+/, '').trim(); }
     return '';
@@ -167,10 +203,15 @@ function parseVIZ(text) {
   }
   if (out.nom) out.nom = norm(out.nom).replace(/[^A-Z\s'-]/g, '').trim();
   // numéro de carte sans MRZ : suite de 9 chiffres ou plus
-  const num = text.replace(/\s/g, '').match(/\d{9,17}/); if (num) out.numPiece = num[0];
+  for (let i = 0; i < N.length && !out.numPiece; i++) {
+    const m = N[i].match(/(?:\bN[°ºO]\.?|NUMERO|\bNNI\b|\bNIN\b|(?:CARD|DOCUMENT|PASSPORT) (?:NO|NUMBER)\.?)[^A-Z0-9]*(?:DE (?:LA )?(?:CARTE|PIECE)[^A-Z0-9]*)?([A-Z0-9][A-Z0-9 .\-]{5,20})/);
+    const v = m && m[1].replace(/[^A-Z0-9]/g, ''); if (v && (v.match(/\d/g) || []).length >= 5) out.numPiece = v;
+  }
+  // suite isolée d'au moins 9 chiffres, sur une seule ligne ; jamais une date
+  if (!out.numPiece) for (const l of N) { if (/\d{1,2}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{4}/.test(l)) continue; const m = l.match(/(?:^|[^\d])(\d{9,17})(?!\d)/); if (m) { out.numPiece = m[1]; break; } }
   const nt = norm(text);
   out.type = /PASSEPORT|PASSPORT/.test(nt) ? 'Passeport' : /PERMIS DE CONDUIRE|DRIVING/.test(nt) ? 'Permis de conduire' : /CARTE DE SEJOUR|RESIDENCE PERMIT/.test(nt) ? 'Carte de séjour' : /IDENTITE|IDENTITY/.test(nt) ? 'CNI' : '';
-  if (/CAMEROUN|CAMEROON/.test(nt)) out.cmr = true;
+  if (/CAMEROUN|CAMEROON/.test(nt)) out.pays = 'CMR'; else if (/\bTCHAD\b|\bCHAD\b/.test(nt)) out.pays = 'TCD'; else if (/CENTRAFRI/.test(nt)) out.pays = 'CAF'; else if (/GABON/.test(nt)) out.pays = 'GAB';
   return out;
 }
 
@@ -179,24 +220,49 @@ function parseVIZ(text) {
 export async function readIdCard(files, onProgress = () => {}) {
   const imgs = []; for (const f of files) if (f) imgs.push(await loadImage(f));
   if (!imgs.length) throw new Error('aucune image');
-  const steps = imgs.length * 2; let step = 0;
-  progressCb = (status, p) => onProgress(status === 'recognizing text' ? 'Lecture de la carte…' : 'Préparation du moteur de lecture…', Math.min(1, (step + (status === 'recognizing text' ? p : 0)) / steps));
+  let label = 'Lecture de la carte…', base = 0, span = 1;
+  progressCb = (status, p) => onProgress(status === 'recognizing text' ? label : 'Préparation du moteur de lecture…', Math.min(1, base + (status === 'recognizing text' ? p * span : 0)));
   onProgress('Préparation du moteur de lecture…', 0);
   const w = await getWorker();
-  let viz = '', mrz = null;
-  for (const img of imgs) {
-    await w.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3', preserve_interword_spaces: '1' });
-    const r = await w.recognize(prep(img, 2000, null, false)); viz += '\n' + r.data.text; step++;
-    if (!mrz) {
-      await w.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: '6' });
-      for (const crop of [{ x: 0, y: 0.55, w: 1, h: 0.45 }, { x: 0, y: 0.3, w: 1, h: 0.7 }]) {
-        const t = (await w.recognize(prep(img, 2200, crop, true))).data.text; mrz = parseMRZ(t); if (mrz) break;
+  const setText = () => w.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3', preserve_interword_spaces: '1' });
+  const setMrz = () => w.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: '6' });
+  const quality = t => (t.match(/[A-Za-zÀ-ÿ]{4,}/g) || []).length + 4 * (t.match(/<<|IDENTIT|NAISSANCE|PRENOM|PRÉNOM|NOM\b|PROFESSION|BIRTH/gi) || []).length;
+  let viz = '', mrz = null; const better = m => { if (m && (!mrz || m._ok > mrz._ok || (m._ok === mrz._ok && m.nom && !mrz.nom))) mrz = m; };
+  const done = () => mrz && mrz._ok >= 2 && mrz.nom;
+  try {
+    for (let n = 0; n < imgs.length; n++) {
+      let img = imgs[n]; const part = 1 / imgs.length, at = (x, l) => { base = (n + x) * part; span = 0.08 * part; label = l; };
+      // 1) texte imprimé, en cherchant le bon sens si la photo est tournée
+      await setText(); at(0, 'Lecture de la carte…'); let r = await w.recognize(prep(img, 2000, null, false), {}, { text: true, blocks: true }), best = quality(r.data.text);
+      if (best < 12) {
+        let deg = 0;
+        for (const [k, g] of [90, 270, 180].entries()) { at(0.1 + k * 0.1, 'Recherche du sens de la carte…'); const t = await w.recognize(prep(rotate(imgs[n], g), 1400, null, false)); const q = quality(t.data.text); if (q > best * 1.3 + 1) { best = q; deg = g; } }
+        if (deg) { img = rotate(imgs[n], deg); at(0.4, 'Lecture de la carte…'); r = await w.recognize(prep(img, 2000, null, false), {}, { text: true, blocks: true }); }
+      }
+      viz += '\n' + r.data.text;
+      if (done()) continue;
+      better(parseMRZ(r.data.text)); // texte général, parfois suffisant
+      // 2) zone MRZ : d'abord à l'endroit où des « < » ont été vus, puis le bas de l'image, puis toute l'image
+      const crops = [], k = Math.min(1.6, 2000 / Math.max(img.width, img.height)), W = img.width * k, H = img.height * k;
+      const ls = (r.data.blocks || []).flatMap(b => b.paragraphs || []).flatMap(p => p.lines || []).filter(l => (l.text.match(/[<«‹]/g) || []).length >= 3);
+      if (ls.length) {
+        const x0 = Math.min(...ls.map(l => l.bbox.x0)), x1 = Math.max(...ls.map(l => l.bbox.x1)), y0 = Math.min(...ls.map(l => l.bbox.y0)), y1 = Math.max(...ls.map(l => l.bbox.y1)), h = Math.max(...ls.map(l => l.bbox.y1 - l.bbox.y0));
+        const X0 = Math.max(0, x0 - 0.06 * W), Y0 = Math.max(0, y0 - 2.5 * h), X1 = Math.min(W, x1 + 0.06 * W), Y1 = Math.min(H, y1 + 2.5 * h);
+        crops.push({ x: X0 / W, y: Y0 / H, w: (X1 - X0) / W, h: (Y1 - Y0) / H, up: 1 });
+      }
+      crops.push({ x: 0, y: 0.55, w: 1, h: 0.45 }, { x: 0, y: 0.3, w: 1, h: 0.7 });
+      await setMrz(); let i = 0;
+      for (const crop of crops) {
+        for (const mode of [0, 1, 2]) {
+          if (done()) break;
+          at(0.5 + 0.5 * i++ / (crops.length * 3), 'Lecture des lignes du bas de la carte…');
+          const c = mode === 1 ? prep(img, 2200, crop, true) : mode === 0 ? adaptive(prep(img, 2200, crop, false)) : prep(img, 2200, crop, false);
+          better(parseMRZ((await w.recognize(c)).data.text));
+        }
+        if (done()) break;
       }
     }
-    step++;
-  }
-  progressCb = null;
-  await w.setParameters({ tessedit_char_whitelist: '' });
+  } finally { progressCb = null; await w.setParameters({ tessedit_char_whitelist: '' }).catch(() => {}); }
   onProgress('Analyse des informations…', 1);
   return merge(mrz, parseVIZ(viz));
 }
@@ -222,6 +288,6 @@ function merge(m, v) {
   for (const k of ['nom', 'prenoms', 'sexe', 'dateNaiss', 'dateExp', 'numPiece']) if (!data[k] && v[k]) put(k, k === 'prenoms' ? v[k].toLowerCase().replace(/(^|[\s-])\S/g, x => x.toUpperCase()) : v[k], false);
   for (const k of ['lieuNaiss', 'profession', 'dateDeliv', 'lieuDeliv', 'adresse']) if (v[k]) put(k, v[k], false);
   if (!data.typePiece && v.type) put('typePiece', v.type, false);
-  if (!data.nationalite && v.cmr) { put('nationalite', 'Camerounaise', false); put('paysRes', 'Cameroun', false); }
+  if (!data.nationalite && v.pays) { put('nationalite', NAT[v.pays][0], false); put('paysRes', NAT[v.pays][1], false); }
   return { data, auto, doubt, mrzFound: !!m };
 }
