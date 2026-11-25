@@ -1,5 +1,5 @@
 import { store, onStore, initStore, login, logout, resetPassword, saveFiche, deleteFiche, saveCfg, saveLogo, backupJSON, restoreJSON, DEF_CFG } from './store.js';
-import { esc, today, nowHM, addDays, isD, dfr, money, nights, up, clone, PIECES, TRANSPORTS, rooms, roomOf, logoSrc, DEF_LOGO } from './common.js';
+import { APP_VERSION, esc, today, nowHM, addDays, isD, dfr, money, nights, up, clone, PIECES, TRANSPORTS, rooms, roomOf, logoSrc, DEF_LOGO } from './common.js';
 import { ficheCanvas, makePdf, makePng, makeDocx, download, share, canShareFiles, printFiche, fname, loadImg } from './fiche.js';
 import { readIdCard, warmUp } from './ocr.js';
 
@@ -30,7 +30,7 @@ function ask(title, body, okTxt = 'Confirmer', cancel = true) {
     $('#mok').onclick = () => done(true); $('#mno').onclick = () => done(false); $('#mok').focus();
   });
 }
-function renderBrand() { for (const i of $$('img.logo')) i.src = logoSrc(); for (const h of $$('.hname')) h.textContent = store.cfg.nom || DEF_CFG.nom; }
+function renderBrand() { const bs = $('.brand span'); if (bs) bs.textContent = 'Smart Check-in · ' + APP_VERSION; for (const i of $$('img.logo')) i.src = logoSrc(); for (const h of $$('.hname')) h.textContent = store.cfg.nom || DEF_CFG.nom; }
 function renderSync() { const s = $('#sync'); s.classList.toggle('ok', store.sync.ok); s.title = store.sync.text; $('#syncTxt').textContent = store.sync.text; }
 
 /* ---------- navigation ---------- */

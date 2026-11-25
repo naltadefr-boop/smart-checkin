@@ -165,17 +165,41 @@ const LABELS = {
   dateNaiss: /DATE DE NAISSANCE|DATE OF BIRTH|NE\(?E?\)? LE/,
   lieuNaiss: /LIEU DE NAISSANCE|PLACE OF BIRTH/,
   profession: /PROFESSION|OCCUPATION/,
-  dateDeliv: /DATE DE DELIVRANCE|DATE OF ISSUE|DELIVREE? LE|ISSUED ON/,
+  dateDeliv: /DATE DE DELIVRANCE|DATE D.EMISSION|FAITE? LE|ETABLIE? LE|DATE OF ISSUE|DELIVREE? LE|ISSUED ON/,
   dateExp: /DATE D.EXPIRATION|DATE OF EXPIRY|EXPIRY DATE|VALABLE JUSQU|EXPIRE LE/,
-  lieuDeliv: /LIEU DE DELIVRANCE|PLACE OF ISSUE|POSTE D.IDENTIFICATION|IDENTIFICATION POST/,
+  lieuDeliv: /LIEU DE DELIVRANCE|LIEU D.EMISSION|DELIVREE? A\b|FAITE? A\b|PLACE OF ISSUE|POSTE D.IDENTIFICATION|IDENTIFICATION POST/,
   adresse: /ADRESSE|ADDRESS|DOMICILE/,
   sexe: /\bSEXE\b|\bSEX\b/,
 };
-const ANY_LABEL = new RegExp(Object.values(LABELS).map(r => r.source).join('|') + '|PERE|MERE|FATHER|MOTHER|TAILLE|HEIGHT|SIGNATURE|AUTORITE|AUTHORITY|REPUBLIQUE|REPUBLIC|CARTE NATIONALE|NATIONAL IDENTITY');
+const ANY_LABEL = new RegExp(Object.values(LABELS).map(r => r.source).join('|') + '|NUMERO DE|N° DE|PERE|MERE|FATHER|MOTHER|TAILLE|HEIGHT|SIGNATURE|AUTORITE|AUTHORITY|REPUBLIQUE|REPUBLIC|CARTE NATIONALE|NATIONAL IDENTITY');
 function dateIn(s) {
   const m = norm(s).match(/(\d{1,2})\s*[./\-\s]\s*(\d{1,2})\s*[./\-\s]\s*((?:19|20)\d{2})/); if (!m) return '';
   const d = +m[1], mo = +m[2]; if (d < 1 || d > 31 || mo < 1 || mo > 12) return '';
   return `${m[3]}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+// Date et lieu de délivrance / d'émission : titres sur une même ligne ou séparés, valeurs à côté ou en dessous.
+function delivrance(lines, N, known) {
+  const tD = /DATE\s*(?:DE\s*)?D.?LIVR\w*|DATE\s*D.{0,2}.?MISSION|D.?LIVR.?.?\s+LE\b|DATE OF ISSUE/, tL = /LIEU\s*D.{0,2}.?MISSION|LIEU\s*(?:DE\s*)?D.?LIVR\w*|PLACE OF ISSUE/, tAny = /DATE|LIEU|NUMERO|\bN[°O]\b|EXPIR|NAISS|PROFESS|ADRESS|SEXE|\bNOM\b|PRENOM|TAILLE|SIGNATURE|AUTORITE|TITULAIRE|<</;
+  const rd = /(\d{1,2})\s*[./\-\s]\s*(\d{1,2})\s*[./\-\s]\s*((?:19|20)\d{2})/;
+  const place = s => { const t = s.replace(/^[^\p{L}]+/u, '').replace(/^(?:le|à|a|ou)\s+/i, '').replace(/[^\p{L}\s'’.\-]+.*$/u, '').replace(/\s+/g, ' ').replace(/[\s.\-'’]+$/, '').trim(); return (t.match(/\p{L}/gu) || []).length >= 3 && !tAny.test(norm(t)) ? t.slice(0, 60) : ''; };
+  const today = new Date().toISOString().slice(0, 10), good = d => d && d <= today && d !== known.dateNaiss && d !== known.dateExp && (!known.dateExp || d < known.dateExp) && (!known.dateNaiss || d > known.dateNaiss);
+  let date = '', lieu = '';
+  const tail = (i, re) => { const m = N[i].match(re); return N[i].length === lines[i].length ? lines[i].slice(m.index + m[0].length) : N[i].slice(m.index + m[0].length); };
+  for (let i = 0; i < N.length; i++) {
+    const hasD = tD.test(N[i]), hasL = tL.test(N[i]); if (!hasD && !hasL) continue;
+    if (hasD && !date) {
+      const t = tail(i, tD); let d = dateIn(t), src = t;
+      for (let j = i + 1; !good(d) && j <= Math.min(i + 2, N.length - 1); j++) { if (/EXPIR|NAISS/.test(N[j])) break; d = dateIn(lines[j]); src = lines[j]; }
+      if (good(d)) { date = d; if (hasL && !lieu) { const m = src.match(rd); if (m) lieu = place(src.slice(m.index + m[0].length)) || place(src.slice(0, m.index).replace(/.*\d/, '')); } }
+    }
+    if (hasL && !lieu) {
+      lieu = place(tail(i, tL));
+      for (let j = i + 1; !lieu && j <= Math.min(i + 2, N.length - 1); j++) { const m = lines[j].match(rd); lieu = m ? place(lines[j].slice(m.index + m[0].length)) : tAny.test(N[j]) ? '' : place(lines[j]); }
+    }
+  }
+  const r = {}; if (date) r.dateDeliv = date; else if (known.dateDeliv && !good(known.dateDeliv)) r.dateDeliv = '';
+  if (lieu) r.lieuDeliv = lieu; else if (known.lieuDeliv && !place(known.lieuDeliv)) r.lieuDeliv = '';
+  return r;
 }
 function parseVIZ(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
@@ -201,6 +225,7 @@ function parseVIZ(text) {
       out[k] = v.replace(/[^\p{L}\p{N}\s'.,\-/]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 80); if (out[k]) break;
     }
   }
+  Object.assign(out, delivrance(lines, N, out));
   if (out.nom) out.nom = norm(out.nom).replace(/[^A-Z\s'-]/g, '').trim();
   // numéro de carte sans MRZ : suite de 9 chiffres ou plus
   for (let i = 0; i < N.length && !out.numPiece; i++) {
@@ -227,7 +252,7 @@ export async function readIdCard(files, onProgress = () => {}) {
   const setText = () => w.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '3', preserve_interword_spaces: '1' });
   const setMrz = () => w.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: '6' });
   const quality = t => (t.match(/[A-Za-zÀ-ÿ]{4,}/g) || []).length + 4 * (t.match(/<<|IDENTIT|NAISSANCE|PRENOM|PRÉNOM|NOM\b|PROFESSION|BIRTH/gi) || []).length;
-  let viz = '', mrz = null; const better = m => { if (m && (!mrz || m._ok > mrz._ok || (m._ok === mrz._ok && m.nom && !mrz.nom))) mrz = m; };
+  let viz = '', mrz = null; const turned = [], extra = {}; const better = m => { if (m && (!mrz || m._ok > mrz._ok || (m._ok === mrz._ok && m.nom && !mrz.nom))) mrz = m; };
   const done = () => mrz && mrz._ok >= 2 && mrz.nom;
   try {
     for (let n = 0; n < imgs.length; n++) {
@@ -239,7 +264,7 @@ export async function readIdCard(files, onProgress = () => {}) {
         for (const [k, g] of [90, 270, 180].entries()) { at(0.1 + k * 0.1, 'Recherche du sens de la carte…'); const t = await w.recognize(prep(rotate(imgs[n], g), 1400, null, false)); const q = quality(t.data.text); if (q > best * 1.3 + 1) { best = q; deg = g; } }
         if (deg) { img = rotate(imgs[n], deg); at(0.4, 'Lecture de la carte…'); r = await w.recognize(prep(img, 2000, null, false), {}, { text: true, blocks: true }); }
       }
-      viz += '\n' + r.data.text;
+      viz += '\n' + r.data.text; turned.push(img);
       if (done()) continue;
       better(parseMRZ(r.data.text)); // texte général, parfois suffisant
       // 2) zone MRZ : d'abord à l'endroit où des « < » ont été vus, puis le bas de l'image, puis toute l'image
@@ -262,9 +287,18 @@ export async function readIdCard(files, onProgress = () => {}) {
         if (done()) break;
       }
     }
+    for (const img of turned) {
+      const v = parseVIZ(viz); if (v.dateDeliv && v.lieuDeliv) break;
+      await w.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: '11' }); base = 0.95; span = 0.04; label = 'Recherche de la date et du lieu de délivrance…';
+      const x = parseVIZ((await w.recognize(adaptive(prep(img, 2400, null, false)))).data.text);
+      for (const k of ['dateDeliv', 'lieuDeliv', 'lieuNaiss']) if (!v[k] && x[k]) extra[k] ||= x[k];
+    }
   } finally { progressCb = null; await w.setParameters({ tessedit_char_whitelist: '' }).catch(() => {}); }
   onProgress('Analyse des informations…', 1);
-  return merge(mrz, parseVIZ(viz));
+  const v = parseVIZ(viz); for (const k in extra) v[k] ||= extra[k];
+  // une date de délivrance égale ou postérieure à l'expiration lue sur la MRZ est une erreur de lecture
+  if (mrz && v.dateDeliv && (v.dateDeliv === mrz.dateNaiss || (mrz.dateExp && v.dateDeliv >= mrz.dateExp))) v.dateDeliv = '';
+  return merge(mrz, v);
 }
 
 // fusion : la MRZ (vérifiée) prime ; le texte imprimé complète et reste « à vérifier »
