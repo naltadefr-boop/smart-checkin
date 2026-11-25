@@ -48,7 +48,7 @@ export async function ficheCanvas(f, k) {
   T('Réceptionniste : ' + (f.recep || ''), 47, 35, { size: 3, c: MUTE, max: 98 });
   x.strokeStyle = VIO; x.lineWidth = 0.5; x.strokeRect(150, 10, 48, 26); x.fillStyle = VIO; x.fillRect(150, 10, 48, 8.5);
   T('FICHE DE POLICE', 174, 15.8, { size: 3.9, w: 800, c: '#fff', a: 'center' });
-  T('N° ' + (f.num || ''), 174, 25, { size: 4.2, w: 700, a: 'center' });
+  T('N° ' + (f.num || ''), 174, 25, { size: 4.2, w: 700, a: 'center', max: 45 });
   T('Établie le ' + dfr((f.createdAt || '').slice(0, 10) || f.arrivee), 174, 31.5, { size: 3, c: MUTE, a: 'center' });
   const g = x.createLinearGradient(L, 0, R, 0); g.addColorStop(0, BLUE); g.addColorStop(0.55, TURQ); g.addColorStop(1, VIO); x.fillStyle = g; x.fillRect(L, 42, R - L, 1.3);
   T("BULLETIN INDIVIDUEL D'ENREGISTREMENT DU VOYAGEUR", 105, 51, { size: 4.5, w: 800, c: BLUE, a: 'center' });

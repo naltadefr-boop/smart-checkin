@@ -1,14 +1,21 @@
 rules_version = '2';
-// Règles de sécurité de la base Wellness Smart Check-in :
-// seules les personnes connectées avec un compte créé par l'administrateur
-// peuvent lire et écrire les fiches et les paramètres.
+// Règles de sécurité de la base Wellness Smart Check-in.
+// Être connecté ne suffit pas : l'UID du compte doit exister dans la collection « acces ».
+// Cette collection se gère uniquement dans la console Firebase (aucune écriture depuis l'application).
 service cloud.firestore {
   match /databases/{database}/documents {
+    function autorise() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/acces/$(request.auth.uid));
+    }
     match /fiches/{id} {
-      allow read, write: if request.auth != null;
+      allow read, write: if autorise();
     }
     match /config/{id} {
-      allow read, write: if request.auth != null;
+      allow read, write: if autorise();
+    }
+    match /acces/{uid} {
+      allow read, write: if false;
     }
   }
 }

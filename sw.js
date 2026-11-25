@@ -1,6 +1,6 @@
 // Service worker : permet d'ouvrir l'application sans Internet.
 // À chaque mise à jour de l'application, augmentez VERSION (v2, v3…).
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `whsc-shell-${VERSION}`, LIBS = `whsc-libs-${VERSION}`;
 const SHELL_FILES = ['./', 'index.html', 'manifest.webmanifest', 'config.js', 'js/app.js', 'js/store.js', 'js/common.js', 'js/fiche.js', 'js/ocr.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo-provisoire.svg',
@@ -10,7 +10,7 @@ const LIB_FILES = ['vendor/jspdf.umd.min.js', 'vendor/docx.umd.js', 'vendor/fire
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
-    await (await caches.open(SHELL)).addAll(SHELL_FILES);
+    await (await caches.open(SHELL)).addAll(SHELL_FILES.map(u => new Request(u, { cache: 'reload' })));
     const libs = await caches.open(LIBS);
     await Promise.all(LIB_FILES.map(u => libs.add(u).catch(() => {})));
     self.skipWaiting();

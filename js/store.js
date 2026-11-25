@@ -68,7 +68,7 @@ function subscribe() {
     else setSync(!s.metadata.hasPendingWrites, s.metadata.hasPendingWrites ? 'Envoi en cours…' : 'Synchronisé');
     if (first && !s.metadata.fromCache) { first = false; migrateLocal(); }
     emit('data');
-  }, e => { console.error(e); setSync(false, 'Accès refusé à la base (règles de sécurité ?)'); }));
+  }, e => { console.error(e); setSync(false, "Accès refusé : ce compte n'est pas autorisé par l'administrateur"); }));
   unsubs.push(fb.onSnapshot(fb.doc(fs, 'config', 'hotel'), s => {
     if (s.exists()) { store.cfg = { ...DEF_CFG, ...s.data() }; kvSet('cfg', store.cfg).catch(() => {}); emit('cfg'); }
   }, () => {}));
@@ -82,10 +82,10 @@ async function migrateLocal() {
   try {
     const local = (await req('fiches', 'readonly', s => s.getAll())) || [];
     const miss = local.filter(f => !store.fiches.find(x => x.id === f.id));
-    for (const f of miss) fb.setDoc(fb.doc(fs, 'fiches', f.id), clone(f)).catch(() => {});
-    await req('fiches', 'readwrite', s => s.clear());
+    for (const f of local) if (!miss.includes(f)) await req('fiches', 'readwrite', s => s.delete(f.id));
+    await Promise.all(miss.map(async f => { await fb.setDoc(fb.doc(fs, 'fiches', f.id), clone(f)); await req('fiches', 'readwrite', s => s.delete(f.id)); }));
     if (miss.length) emit({ toast: miss.length + ' fiche(s) de cet appareil envoyée(s) dans la base partagée.' });
-  } catch (e) {}
+  } catch (e) { console.warn('Envoi des fiches locales incomplet', e); emit({ error: e }); }
 }
 
 /* ---------- connexion (mode partagé) ---------- */
@@ -121,9 +121,17 @@ export async function saveLogo(data) {
   emit('cfg');
 }
 // sauvegarde complète (fichier JSON) et restauration
-export function backupJSON() { return JSON.stringify({ app: 'wellness-smart-checkin', date: new Date().toISOString(), cfg: store.cfg, fiches: store.fiches }, null, 1); }
-export async function restoreJSON(txt) {
+export function backupJSON() { return JSON.stringify({ app: 'wellness-smart-checkin', date: new Date().toISOString(), cfg: { ...store.cfg, pin: undefined }, logo: store.logo, fiches: store.fiches }, null, 1); }
+// reglages : remet aussi coordonnées, tarifs et logo (le code d'accès de l'appareil n'est jamais modifié)
+export async function restoreJSON(txt, reglages = false) {
   const d = JSON.parse(txt); if (!d || !Array.isArray(d.fiches)) throw new Error('format');
+  if (reglages) {
+    if (d.cfg && typeof d.cfg === 'object') {
+      const c = { ...store.cfg }; for (const k of Object.keys(DEF_CFG)) if (k !== 'pin' && d.cfg[k] !== undefined) c[k] = d.cfg[k];
+      await saveCfg(c);
+    }
+    if (typeof d.logo === 'string' && (d.logo === '' || /^data:image\//.test(d.logo))) await saveLogo(d.logo);
+  }
   let n = 0; for (const f of d.fiches) { if (f && typeof f.id === 'string' && !store.fiches.find(x => x.id === f.id)) { await saveFiche(f); n++; } }
   return n;
 }

@@ -207,10 +207,13 @@ function merge(m, v) {
   const put = (k, val, sure) => { if (!val) return; data[k] = val; auto[k] = 1; if (!sure) doubt[k] = 1; };
   if (m) {
     const strong = m._checks > 0 && m._ok >= Math.ceil(m._checks / 2);
-    put('nom', m.nom, strong); put('prenoms', m.prenoms, strong); put('sexe', m.sexe, strong);
+    // Les chiffres de contrôle ne couvrent ni le nom, ni les prénoms, ni le sexe, ni la nationalité :
+    // ces champs ne sont sûrs que si le texte imprimé donne la même lecture.
+    const same = (a, b) => !!a && !!b && norm(a).replace(/[^A-Z]/g, '') === norm(b).replace(/[^A-Z]/g, '');
+    put('nom', m.nom, strong && same(m.nom, v.nom)); put('prenoms', m.prenoms, strong && same(m.prenoms, v.prenoms)); put('sexe', m.sexe, strong && m.sexe === v.sexe);
     put('dateNaiss', m.dateNaiss, m.naissSure); put('dateExp', m.dateExp, m.expSure);
     put('numPiece', m.numPiece, m.numSure); put('typePiece', m.type, strong);
-    const n = NAT[m.nat]; if (n) { put('nationalite', n[0], strong); put('paysRes', n[1], false); }
+    const n = NAT[m.nat]; if (n) { put('nationalite', n[0], false); put('paysRes', n[1], false); }
   }
   // la MRZ perd les traits d'union et les accents : on garde l'écriture imprimée si c'est le même prénom
   const key = s => norm(s || '').replace(/[^A-Z]/g, '');

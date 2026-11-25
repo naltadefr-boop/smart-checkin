@@ -9,7 +9,15 @@ const SS = { get(k) { try { return sessionStorage.getItem('whsc_' + k); } catch 
 
 const ui = { recep: '', open: false, view: 'dash', draft: null, auto: {}, doubt: {}, step: 1, shots: { r: null, v: null }, cur: null, q: '', qd: '', sig: { dirty: false, data: '' }, installEvt: null };
 const occupied = () => { const m = {}; for (const f of store.fiches) if (f.statut === 'en_sejour' && f.chambre) m[f.chambre] = f; return m; };
-function nextNum() { const y = new Date().getFullYear(); let m = 0; for (const f of store.fiches) { const p = String(f.num || '').split('-'); if (p[0] == String(y)) m = Math.max(m, +p[1] || 0); } return y + '-' + String(m + 1).padStart(4, '0'); }
+// Numéro : année-compteur-code de l'appareil. Le code évite les doublons entre appareils hors ligne ;
+// le compteur mémorisé évite de réattribuer le numéro d'une fiche supprimée.
+let devCode = '';
+function deviceCode() {
+  if (!devCode) devCode = LS.get('device', '');
+  if (!devCode) { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; devCode = [...crypto.getRandomValues(new Uint8Array(3))].map(b => A[b % 32]).join(''); LS.set('device', devCode); }
+  return devCode;
+}
+function nextNum() { const y = new Date().getFullYear(); const last = LS.get('lastNum', {}); let m = last.y === y ? +last.n || 0 : 0; for (const f of store.fiches) { const p = String(f.num || '').split('-'); if (p[0] == String(y)) m = Math.max(m, +p[1] || 0); } LS.set('lastNum', { y, n: m + 1 }); return y + '-' + String(m + 1).padStart(4, '0') + '-' + deviceCode(); }
 
 /* ---------- messages ---------- */
 let tt;
@@ -310,7 +318,12 @@ function vSet(m) {
     download(`Rapport-reception_${a || 'debut'}_${b || 'fin'}.csv`, new Blob([csv], { type: 'text/csv' })); toast(r.length + ' fiches exportées.');
   };
   $('#bak').onclick = () => { download(`Sauvegarde-smart-checkin_${today()}.json`, new Blob([backupJSON()], { type: 'application/json' })); toast('Sauvegarde enregistrée dans Téléchargements.'); };
-  $('#rest').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { const n = await restoreJSON(await f.text()); toast(n + ' fiche(s) restaurée(s).'); } catch (x) { toast("Ce fichier n'est pas une sauvegarde valide."); } };
+  $('#rest').onchange = async e => { const f = e.target.files[0]; if (!f) return; const txt = await f.text(); e.target.value = '';
+    try {
+      const d = JSON.parse(txt); if (!d || !Array.isArray(d.fiches)) throw new Error('format');
+      const reg = await ask('Restaurer aussi les réglages ?', 'Les coordonnées, les tarifs et le logo actuels seront remplacés par ceux de la sauvegarde. Avec « Annuler », seules les fiches manquantes sont restaurées.', 'Remplacer les réglages');
+      const n = await restoreJSON(txt, reg); renderBrand(); if (ui.view === 'parametres') vSet(m); toast(n + ' fiche(s) restaurée(s)' + (reg ? ', réglages remis en place.' : '.'));
+    } catch (x) { toast("Ce fichier n'est pas une sauvegarde valide."); } };
 }
 
 /* ---------- installation (PWA) ---------- */
