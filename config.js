@@ -17,4 +17,11 @@
  *   appId: "1:1234567890:web:abcdef123456"
  * };
  */
-export const FIREBASE_CONFIG = null;
+export const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDu6MLvbjDdSzllfRo-lF82sxbzGoW5rCo",
+  authDomain: "wellness-bagjem.firebaseapp.com",
+  projectId: "wellness-bagjem",
+  storageBucket: "wellness-bagjem.firebasestorage.app",
+  messagingSenderId: "184089026821",
+  appId: "1:184089026821:web:114892990aa632021f976c"
+};
