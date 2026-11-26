@@ -1,7 +1,7 @@
 {
   "name": "Wellness Hôtel – Smart Check-in",
   "short_name": "Smart Check-in",
-  "description": "Enregistrement des clients et fiches de police du Wellness Hôtel Bagjem",
+  "description": "Enregistrement des clients et fiches d’hébergement du Wellness Hôtel Bagjem",
   "lang": "fr",
   "start_url": "./index.html",
   "scope": "./",

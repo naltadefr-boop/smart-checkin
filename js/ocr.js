@@ -164,7 +164,7 @@ const LABELS = {
   nom: /\bNOM\b|SURNAME/,
   dateNaiss: /DATE DE NAISSANCE|DATE OF BIRTH|NE\(?E?\)? LE/,
   lieuNaiss: /LIEU DE NAISSANCE|PLACE OF BIRTH/,
-  profession: /PROFESSION|OCCUPATION/,
+  profession: /PROF[EI]SS?[I1L]ON|OCCUPATION/,
   dateDeliv: /DATE DE DELIVRANCE|DATE D.EMISSION|FAITE? LE|ETABLIE? LE|DATE OF ISSUE|DELIVREE? LE|ISSUED ON/,
   dateExp: /DATE D.EXPIRATION|DATE OF EXPIRY|EXPIRY DATE|VALABLE JUSQU|EXPIRE LE/,
   lieuDeliv: /LIEU DE DELIVRANCE|LIEU D.EMISSION|DELIVREE? A\b|FAITE? A\b|PLACE OF ISSUE|POSTE D.IDENTIFICATION|IDENTIFICATION POST/,
@@ -179,7 +179,7 @@ function dateIn(s) {
 }
 // Date et lieu de délivrance / d'émission : titres sur une même ligne ou séparés, valeurs à côté ou en dessous.
 function delivrance(lines, N, known) {
-  const tD = /DATE\s*(?:DE\s*)?D.?LIVR\w*|DATE\s*D.{0,2}.?MISSION|D.?LIVR.?.?\s+LE\b|DATE OF ISSUE/, tL = /LIEU\s*D.{0,2}.?MISSION|LIEU\s*(?:DE\s*)?D.?LIVR\w*|PLACE OF ISSUE/, tAny = /DATE|LIEU|NUMERO|\bN[°O]\b|EXPIR|NAISS|PROFESS|ADRESS|SEXE|\bNOM\b|PRENOM|TAILLE|SIGNATURE|AUTORITE|TITULAIRE|<</;
+  const tD = /DATE\s*ET\s*LIEU|DATE\s*(?:DE\s*)?D.?LIVR\w*|DATE\s*D.{0,2}.?MISSION|D.?LIVR.?.?\s+LE\b|DATE OF ISSUE/, tL = /LIEU\s*D.{0,2}.?MISSION|LIEU\s*(?:DE\s*)?D.?LIVR\w*|PLACE OF ISSUE/, tAny = /DATE|LIEU|NUMERO|\bN[°O]\b|EXPIR|NAISS|PROFESS|ADRESS|SEXE|\bNOM\b|PRENOM|TAILLE|SIGNATURE|AUTORITE|TITULAIRE|<</;
   const rd = /(\d{1,2})\s*[./\-\s]\s*(\d{1,2})\s*[./\-\s]\s*((?:19|20)\d{2})/;
   const place = s => { const t = s.replace(/^[^\p{L}]+/u, '').replace(/^(?:le|à|a|ou)\s+/i, '').replace(/[^\p{L}\s'’.\-]+.*$/u, '').replace(/\s+/g, ' ').replace(/[\s.\-'’]+$/, '').trim(); return (t.match(/\p{L}/gu) || []).length >= 3 && !tAny.test(norm(t)) ? t.slice(0, 60) : ''; };
   const today = new Date().toISOString().slice(0, 10), good = d => d && d <= today && d !== known.dateNaiss && d !== known.dateExp && (!known.dateExp || d < known.dateExp) && (!known.dateNaiss || d > known.dateNaiss);
@@ -312,7 +312,8 @@ function merge(m, v) {
     const same = (a, b) => !!a && !!b && norm(a).replace(/[^A-Z]/g, '') === norm(b).replace(/[^A-Z]/g, '');
     put('nom', m.nom, strong && same(m.nom, v.nom)); put('prenoms', m.prenoms, strong && same(m.prenoms, v.prenoms)); put('sexe', m.sexe, strong && m.sexe === v.sexe);
     put('dateNaiss', m.dateNaiss, m.naissSure); put('dateExp', m.dateExp, m.expSure);
-    put('numPiece', m.numPiece, m.numSure); put('typePiece', m.type, strong);
+    // numéro sûr seulement sans lettre facile à confondre avec un chiffre (O/0, Z/2, I/1…)
+    put('numPiece', m.numPiece, m.numSure && !(/\d/.test(m.numPiece) && /[OQDIZSBGL]/.test(m.numPiece))); put('typePiece', m.type, strong);
     const n = NAT[m.nat]; if (n) { put('nationalite', n[0], false); put('paysRes', n[1], false); }
   }
   // la MRZ perd les traits d'union et les accents : on garde l'écriture imprimée si c'est le même prénom

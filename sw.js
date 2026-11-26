@@ -1,6 +1,6 @@
 // Service worker : permet d'ouvrir l'application sans Internet.
 // À chaque mise à jour de l'application, augmentez VERSION (v2, v3…).
-const VERSION = 'v4';
+const VERSION = 'v5';
 const SHELL = `whsc-shell-${VERSION}`, LIBS = `whsc-libs-${VERSION}`;
 const SHELL_FILES = ['./', 'index.html', 'manifest.webmanifest', 'config.js', 'js/app.js', 'js/store.js', 'js/common.js', 'js/fiche.js', 'js/ocr.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/logo-provisoire.svg',

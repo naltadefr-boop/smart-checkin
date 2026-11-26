@@ -67,7 +67,7 @@ function vDash(m) {
   ${ui.installEvt ? '<div class="note t row" style="justify-content:space-between;margin-bottom:16px"><span>Installez l\'application sur cet appareil pour l\'ouvrir comme une application, même sans Internet.</span><button class="btn b2" id="inst" style="min-height:42px">Installer</button></div>' : ''}
   <div class="hero">
     <div class="go">
-      <div><p style="font-weight:600;opacity:.85;margin:0 0 6px">${esc(d)}</p><h2>Un client arrive à la réception ?</h2><p style="margin-top:8px">Photographiez le recto et le verso de sa pièce d'identité : la fiche de police se remplit toute seule.</p></div>
+      <div><p style="font-weight:600;opacity:.85;margin:0 0 6px">${esc(d)}</p><h2>Un client arrive à la réception ?</h2><p style="margin-top:8px">Photographiez le recto et le verso de sa pièce d'identité : la fiche d’hébergement se remplit toute seule.</p></div>
       <button class="btn" id="goNew"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>NOUVEL ENREGISTREMENT CLIENT</button>
       <svg class="deco" viewBox="0 0 100 100" aria-hidden="true"><rect x="8" y="22" width="84" height="56" rx="8" fill="none" stroke="#fff" stroke-width="5"/><circle cx="32" cy="48" r="10" fill="none" stroke="#fff" stroke-width="5"/><path d="M52 42h28M52 54h20" stroke="#fff" stroke-width="5"/></svg>
     </div>
@@ -89,15 +89,17 @@ function vDash(m) {
 function startDraft(room) {
   const t = today();
   ui.draft = { id: '', num: '', nom: '', prenoms: '', sexe: '', dateNaiss: '', lieuNaiss: '', nationalite: '', profession: '', tel: '', paysRes: '', adresse: '',
-    typePiece: 'CNI', numPiece: '', dateDeliv: '', lieuDeliv: '', dateExp: '', venantDe: '', allantA: '', arrivee: t, heureArr: nowHM(), depart: addDays(t, 1), nbPers: '1', chambre: room || '', transport: '', immat: '' };
+    typePiece: 'CNI', numPiece: '', dateDeliv: '', lieuDeliv: '', dateExp: '', venantDe: '', allantA: '', arrivee: t, heureArr: nowHM(), depart: addDays(t, 1), nbPers: '', nbHommes: '', nbFemmes: '', tarifMode: 'std', tarifLibre: '', chambre: room || '', transport: '', immat: '' };
   ui.auto = {}; ui.doubt = {}; ui.step = 1; ui.sig = { dirty: false, data: '' };
   for (const k of ['r', 'v']) if (ui.shots[k]) { URL.revokeObjectURL(ui.shots[k].url); ui.shots[k] = null; }
 }
+// même ordre que la fiche d'hébergement papier de l'hôtel
 const FORM = [
-  ['Identité du client', [['nom', 'Nom', 'text'], ['prenoms', 'Prénoms', 'text'], ['sexe', 'Sexe', 'sel', [['', '—'], ['M', 'Masculin'], ['F', 'Féminin']]], ['dateNaiss', 'Date de naissance', 'date'], ['lieuNaiss', 'Lieu de naissance', 'text'], ['nationalite', 'Nationalité', 'text'], ['profession', 'Profession', 'text'], ['tel', 'Téléphone', 'tel'], ['paysRes', 'Pays de résidence', 'text'], ['adresse', 'Adresse / domicile habituel', 'text']]],
-  ["Pièce d'identité", [['typePiece', 'Nature de la pièce', 'sel', PIECES.map(p => [p, p])], ['numPiece', 'Numéro de la pièce', 'text'], ['dateDeliv', 'Délivrée le', 'date'], ['lieuDeliv', 'Lieu de délivrance', 'text'], ['dateExp', "Date d'expiration", 'date']]],
-  ['Séjour', [['venantDe', 'Venant de', 'text'], ['allantA', 'Se rend à', 'text'], ['arrivee', "Date d'arrivée", 'date'], ['heureArr', "Heure d'arrivée", 'time'], ['depart', 'Date de départ', 'date'], ['nbPers', 'Nombre de personnes', 'number'], ['chambre', 'Chambre', 'room']]],
-  ['Transport', [['transport', 'Mode de transport', 'sel', [['', '—'], ...TRANSPORTS.map(p => [p, p])]], ['immat', 'Numéro du véhicule', 'text']]],
+  ['Client', [['nom', 'Nom', 'text'], ['prenoms', 'Prénoms', 'text'], ['sexe', 'Sexe', 'sel', [['', '—'], ['M', 'Masculin'], ['F', 'Féminin']]], ['dateNaiss', 'Date de naissance', 'date'], ['lieuNaiss', 'Lieu de naissance', 'text'], ['nationalite', 'Nationalité', 'text'], ['paysRes', 'Pays de résidence', 'text'], ['adresse', 'Adresse', 'text'], ['profession', 'Profession', 'text'], ['tel', 'Téléphone (non imprimé)', 'tel']]],
+  ['Voyage', [['venantDe', 'Venant de', 'text'], ['allantA', 'Se rend à', 'text'], ['nbHommes', 'Nombre de personnes : hommes (M)', 'number'], ['nbFemmes', 'Nombre de personnes : femmes (F)', 'number']]],
+  ["Pièce d'identité", [['typePiece', 'Passeport ou carte nationale d’identité', 'sel', PIECES.map(p => [p, p])], ['numPiece', 'N° de la pièce', 'text'], ['lieuDeliv', 'Délivrée à', 'text'], ['dateDeliv', 'Délivrée le', 'date'], ['dateExp', "Date d'expiration (non imprimée)", 'date']]],
+  ['Transport', [['transport', 'Mode de transport', 'sel', [['', '—'], ...TRANSPORTS.map(p => [p, p])]], ['immat', 'Véhicule N°', 'text']]],
+  ['Chambre et séjour', [['chambre', 'N° chambre', 'room'], ['arrivee', "Date d'arrivée", 'date'], ['heureArr', "Heure d'arrivée", 'time'], ['depart', 'Date de départ', 'date']]],
 ];
 function fieldHTML([k, l, type, opts]) {
   const d = ui.draft, v = d[k] ?? '', cls = 'i' + (ui.doubt[k] ? ' doubt' : ui.auto[k] ? ' auto' : '');
@@ -111,7 +113,7 @@ function fieldHTML([k, l, type, opts]) {
       const o = occ[r.n] && occ[r.n].id !== d.id; inp += `<option value="${esc(r.n)}"${r.n === v ? ' selected' : ''}${o ? ' disabled' : ''}>${esc(r.n)} — ${esc(money(r.t))}${o ? ' (occupée)' : ''}</option>`;
     }
     inp += '</optgroup></select>';
-  } else inp = `<input class="${cls}" data-k="${k}" type="${type}" value="${esc(v)}"${type === 'number' ? ' min="1" inputmode="numeric"' : ''}${k === 'nom' ? ' autocapitalize="characters"' : ''}>`;
+  } else inp = `<input class="${cls}" data-k="${k}" type="${type}" value="${esc(v)}"${type === 'number' ? ' min="0" inputmode="numeric"' : ''}${k === 'nom' ? ' autocapitalize="characters"' : ''}>`;
   return `<label class="f"><span>${esc(l)} ${tag}</span>${inp}</label>`;
 }
 function vNew(m) {
@@ -131,10 +133,10 @@ function vNew(m) {
     return;
   }
   const nAuto = Object.keys(ui.auto).length, nDoubt = Object.keys(ui.doubt).length;
-  m.innerHTML = `<h1 class="h">${edit ? 'Modifier la fiche n° ' + esc(d.num) : 'Compléter la fiche de police'}</h1>${steps}
+  m.innerHTML = `<h1 class="h">${edit ? 'Modifier la fiche n° ' + esc(d.num) : 'Compléter la fiche d’hébergement'}</h1>${steps}
   ${nAuto ? `<div class="note t">${nAuto} information(s) lue(s) sur la carte (en turquoise).${nDoubt ? ` ${nDoubt} sont à vérifier attentivement (en orange).` : ''} Corrigez si besoin avant de valider.</div>` : ''}
-  <form id="ff" autocomplete="off">${FORM.map(([t, fs], i) => `<div class="sec"><h3><i>${i + 1}</i>${esc(t)}</h3><div class="grid">${fs.map(fieldHTML).join('')}</div>${t === 'Séjour' ? '<div class="sum" id="sum"></div>' : ''}</div>`).join('')}
-  <div class="sec"><h3><i>5</i>Signature du client</h3><div class="pad" id="pad"><canvas></canvas><em>Le client signe ici avec le doigt</em></div>
+  <form id="ff" autocomplete="off">${FORM.map(([t, fs], i) => `<div class="sec"><h3><i>${i + 1}</i>${esc(t)}</h3><div class="grid">${fs.map(fieldHTML).join('')}</div>${t === 'Chambre et séjour' ? '<div id="tarifBox"></div><div class="sum" id="sum"></div>' : ''}</div>`).join('')}
+  <div class="sec"><h3><i>6</i>Signature du client</h3><div class="pad" id="pad"><canvas></canvas><em>Le client signe ici avec le doigt</em></div>
   <div class="row" style="margin-top:8px"><button type="button" class="btn bo" id="clr" style="min-height:40px">Effacer la signature</button></div></div>
   <div class="bar">${edit ? '' : '<button type="button" class="btn bo" id="back">Retour au scan</button>'}<button type="submit" class="btn b1" id="save">${edit ? 'Enregistrer les modifications' : 'Valider et générer la fiche'}</button></div></form>`;
   const ff = m.querySelector('#ff');
@@ -144,14 +146,29 @@ function vNew(m) {
     if (k === 'arrivee' && ui.draft.depart < ui.draft.arrivee) { ui.draft.depart = addDays(ui.draft.arrivee, 1); const x = m.querySelector('[data-k=depart]'); if (x) x.value = ui.draft.depart; }
     sumUpdate();
   });
-  ff.addEventListener('change', e => { const k = e.target.dataset.k; if (k) ui.draft[k] = e.target.value; sumUpdate(); });
+  ff.addEventListener('change', e => { const k = e.target.dataset.k; if (k) ui.draft[k] = e.target.value; if (k === 'chambre' || k === 'tarifMode') { tarifBox(); const l = m.querySelector('[data-k=tarifLibre]'); if (k === 'tarifMode' && l) l.focus(); } sumUpdate(); });
   ff.onsubmit = e => { e.preventDefault(); submitFiche(); };
   if ($('#back')) $('#back').onclick = () => { ui.step = 1; vNew(m); };
-  setupPad(); sumUpdate();
+  setupPad(); tarifBox(); sumUpdate();
+}
+// prix de la chambre : tarif normal, sans petit-déjeuner, ou prix écrit à la main (réduction)
+function prixDe(d) {
+  const r = roomOf(d.chambre), want = d.tarifMode || 'std'; if (!r) return { prix: 0, cat: '', mode: want };
+  const mode = want === 'sans' && r.ts ? 'sans' : want === 'libre' ? 'libre' : 'std';
+  if (mode === 'libre') return { prix: Math.max(0, Math.round(+d.tarifLibre || 0)), cat: r.bloc + ' · prix spécial', mode };
+  if (mode === 'sans') return { prix: r.ts, cat: r.bloc + ' · sans petit-déj.', mode };
+  return { prix: r.t, cat: r.cat, mode };
+}
+function tarifBox() {
+  const b = $('#tarifBox'); if (!b) return; const d = ui.draft, r = roomOf(d.chambre);
+  if (!r) { b.innerHTML = ''; return; }
+  const p = prixDe(d); d.tarifMode = p.mode;
+  const opts = [['std', (r.ts ? 'Avec petit-déjeuner' : 'Tarif normal') + ' — ' + money(r.t)], ...(r.ts ? [['sans', 'Sans petit-déjeuner — ' + money(r.ts)]] : []), ['libre', 'Autre prix (réduction, prix maison)']];
+  b.innerHTML = `<div class="grid" style="margin-top:14px"><label class="f"><span>Prix de la chambre</span><select class="i" data-k="tarifMode">${opts.map(([v, l]) => `<option value="${v}"${v === p.mode ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>${p.mode === 'libre' ? `<label class="f"><span>Prix par nuit (FCFA)</span><input class="i" data-k="tarifLibre" type="number" min="0" step="500" inputmode="numeric" value="${esc(d.tarifLibre)}" placeholder="ex. 10000"></label>` : ''}</div>`;
 }
 function sumUpdate() {
-  const s = $('#sum'); if (!s) return; const d = ui.draft, r = roomOf(d.chambre), n = nights(d.arrivee, d.depart);
-  s.innerHTML = `<div><small>Nuitées</small><b>${n}</b></div><div><small>Tarif / nuit</small><b>${r ? esc(money(r.t)) : '—'}</b></div><div><small>Montant du séjour</small><b>${r ? esc(money(r.t * n)) : '—'}</b></div>`;
+  const s = $('#sum'); if (!s) return; const d = ui.draft, r = roomOf(d.chambre), n = nights(d.arrivee, d.depart), p = prixDe(d);
+  s.innerHTML = `<div><small>Nuitées</small><b>${n}</b></div><div><small>Tarif / nuit</small><b>${r ? esc(money(p.prix)) : '—'}</b></div><div><small>Montant du séjour</small><b>${r ? esc(money(p.prix * n)) : '—'}</b></div>`;
 }
 function setupPad() {
   const box = $('#pad'), c = box.querySelector('canvas'), em = box.querySelector('em');
@@ -187,10 +204,13 @@ async function submitFiche() {
   if (!d.nom.trim()) miss.push('nom'); if (!d.prenoms.trim()) miss.push('prénoms'); if (!d.numPiece.trim()) miss.push('numéro de pièce'); if (!d.chambre) miss.push('chambre');
   if (!isD(d.arrivee) || !isD(d.depart)) miss.push('dates de séjour');
   if (miss.length) { toast('À compléter : ' + miss.join(', ') + '.'); return; }
+  const px = prixDe(d); if (px.mode === 'libre' && !px.prix) { toast('Écrivez le prix de la chambre par nuit.'); return; }
   if (d.depart < d.arrivee) { toast("La date de départ est avant la date d'arrivée."); return; }
   const occ = occupied()[d.chambre]; if (occ && occ.id !== d.id) { toast('La chambre ' + d.chambre + ' est déjà occupée.'); return; }
+  let nh = Math.max(0, parseInt(d.nbHommes, 10) || 0), nf = Math.max(0, parseInt(d.nbFemmes, 10) || 0);
+  if (!nh && !nf) { const n0 = Math.max(1, parseInt(d.nbPers, 10) || 1); if (d.sexe === 'F') nf = n0; else nh = n0; }
   const r = roomOf(d.chambre), n = nights(d.arrivee, d.depart), prev = d.id ? store.fiches.find(f => f.id === d.id) : null;
-  const f = { ...clone(prev), ...clone(d), nom: up(d.nom.trim()), prenoms: d.prenoms.trim(), nuits: n, tarif: r ? r.t : 0, total: r ? r.t * n : 0, categorie: r ? r.cat : '',
+  const f = { ...clone(prev), ...clone(d), nom: up(d.nom.trim()), prenoms: d.prenoms.trim(), nbHommes: String(nh), nbFemmes: String(nf), nbPers: String(nh + nf), nuits: n, tarif: px.prix, total: px.prix * n, categorie: px.cat, tarifMode: px.mode,
     signature: ui.sig.dirty ? ui.sig.data : (prev ? prev.signature || '' : ui.sig.data), auto: Object.keys(ui.auto) };
   if (!f.id) { f.id = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); f.num = nextNum(); f.createdAt = new Date().toISOString(); f.recep = ui.recep; f.statut = 'en_sejour'; }
   $('#save').disabled = true;
@@ -211,7 +231,7 @@ function vFiche(m) {
   const f = store.fiches.find(x => x.id === ui.cur);
   if (!f) { m.innerHTML = '<div class="empty">Fiche introuvable.</div>'; return; }
   m.innerHTML = `<div class="row" style="justify-content:space-between;margin-bottom:16px"><div><h1 class="h">Fiche n° ${esc(f.num)}</h1><p class="sub">${esc(up(f.nom))} ${esc(f.prenoms)} · chambre ${esc(f.chambre)} · ${esc(dfr(f.arrivee))} → ${esc(dfr(f.depart))}</p></div>${f.statut === 'en_sejour' ? '<span class="chip in">En séjour</span>' : '<span class="chip out">Parti le ' + esc(dfr(f.departEffectif)) + '</span>'}</div>
-  <div class="fv"><div class="paper"><img id="prev" alt="Aperçu de la fiche de police"></div>
+  <div class="fv"><div class="paper"><img id="prev" alt="Aperçu de la fiche d’hébergement"></div>
   <div class="exp card"><b style="font-size:17px">Exporter et imprimer</b>
     <button class="btn b1" data-x="pdf">${ICON.pdf}TÉLÉCHARGER PDF</button>
     <button class="btn b2" data-x="docx">${ICON.docx}TÉLÉCHARGER WORD</button>
@@ -227,7 +247,8 @@ function vFiche(m) {
   const tok = ++previewToken;
   ficheCanvas(f, 4).then(c => { const i = $('#prev'); if (i && tok === previewToken) i.src = c.toDataURL('image/png'); });
   for (const b of m.querySelectorAll('[data-x]')) b.onclick = () => doExport(f, b.dataset.x, b);
-  $('#edit').onclick = () => { ui.draft = clone(f); ui.auto = {}; ui.doubt = {}; ui.sig = { dirty: false, data: f.signature || '' }; ui.step = 2; go('nouveau', { keep: true }); };
+  $('#edit').onclick = () => { ui.draft = clone(f);
+    if (!ui.draft.tarifMode) { const r0 = roomOf(f.chambre); ui.draft.tarifMode = r0 && f.tarif && f.tarif !== r0.t ? 'libre' : 'std'; ui.draft.tarifLibre = String(f.tarif || ''); } ui.auto = {}; ui.doubt = {}; ui.sig = { dirty: false, data: f.signature || '' }; ui.step = 2; go('nouveau', { keep: true }); };
   $('#again').onclick = () => go('nouveau');
   if ($('#out')) $('#out').onclick = async () => {
     if (!await ask('Départ du client', `Enregistrer le départ de ${up(f.nom)} ${f.prenoms} et libérer la chambre ${f.chambre} ?`, 'Enregistrer le départ')) return;
@@ -280,11 +301,11 @@ function vSet(m) {
   const c = store.cfg, cloud = store.mode === 'cloud';
   const F = (k, l, t = 'text') => `<label class="f"><span>${esc(l)}</span><input class="i" data-c="${k}" type="${t}" value="${esc(c[k])}"${t === 'number' ? ' inputmode="numeric" min="0"' : ''}></label>`;
   m.innerHTML = `<h1 class="h">Paramètres</h1>
-  <div class="sec"><h3>Logo officiel</h3><div class="card logoset"><img class="logo" alt="Logo actuel"><div style="flex:1"><p style="margin:0 0 10px">Le logo apparaît sur l'écran de connexion, l'en-tête, le tableau de bord, chaque fiche de police et tous les exports.${cloud ? ' Il est partagé avec tous les appareils.' : ''}</p>
+  <div class="sec"><h3>Logo officiel</h3><div class="card logoset"><img class="logo" alt="Logo actuel"><div style="flex:1"><p style="margin:0 0 10px">Le logo apparaît sur l'écran de connexion, l'en-tête, le tableau de bord, chaque fiche d’hébergement et tous les exports.${cloud ? ' Il est partagé avec tous les appareils.' : ''}</p>
     <div class="row"><label class="btn b1" style="position:relative">Importer le logo<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" id="logoIn" style="position:absolute;inset:0;opacity:0;cursor:pointer"></label>${store.logo ? '<button class="btn bo" id="logoDel">Revenir au logo provisoire</button>' : ''}</div>
     <small style="color:var(--mute);display:block;margin-top:8px">Conseil : un PNG à fond transparent, au moins 400 px de large.</small></div></div></div>
-  <div class="sec"><h3>Coordonnées imprimées sur la fiche</h3><div class="grid">${F('nom', "Nom de l'hôtel")}${F('adresse', 'Adresse / quartier')}${F('bp', 'Boîte postale')}${F('ville', 'Ville')}${F('tel', 'Téléphone')}${F('email', 'E-mail')}</div></div>
-  <div class="sec"><h3>Tarifs par nuit (FCFA)</h3><div class="grid">${F('tarifA', 'Bloc A · petit-déjeuner inclus', 'number')}${F('tarifB', 'Bloc B · petit-déjeuner inclus', 'number')}${F('tarifApp', 'Appartement · petit-déj. non inclus', 'number')}</div></div>
+  <div class="sec"><h3>Coordonnées imprimées sur la fiche</h3><div class="grid">${F('nom', "Nom de l'hôtel")}${F('services', 'Activités (sous le nom)')}${F('adresse', 'Situation (après « Situé à … »)')}${F('bp', 'Boîte postale')}${F('ville', 'Ville')}${F('tel', 'Téléphone')}${F('email', 'E-mail')}${F('region', 'Région')}${F('departement', 'Département')}${F('arrondissement', 'Arrondissement')}</div></div>
+  <div class="sec"><h3>Tarifs par nuit (FCFA)</h3><div class="grid">${F('tarifA', 'Bloc A · petit-déjeuner inclus', 'number')}${F('tarifAsans', 'Bloc A · sans petit-déjeuner', 'number')}${F('tarifB', 'Bloc B · petit-déjeuner inclus', 'number')}${F('tarifBsans', 'Bloc B · sans petit-déjeuner', 'number')}${F('tarifApp', 'Appartement · petit-déj. non inclus', 'number')}</div></div>
   ${cloud ? '' : `<div class="sec"><h3>Code d'accès de cet appareil</h3><div class="grid">${F('pin', "Code d'ouverture de session")}</div></div>`}
   <div class="bar" style="border:0;padding:0;justify-content:flex-start"><button class="btn b1" id="cfgSave">Enregistrer les paramètres</button></div>
   <div class="sec"><h3>Rapports et sauvegarde</h3><div class="card"><div class="grid"><label class="f"><span>Du</span><input class="i" type="date" id="e1" value="${esc(addDays(today(), -30))}"></label><label class="f"><span>Au</span><input class="i" type="date" id="e2" value="${esc(today())}"></label></div>
@@ -311,7 +332,7 @@ function vSet(m) {
   $('#csv').onclick = () => {
     const a = $('#e1').value, b = $('#e2').value; const r = store.fiches.filter(f => (!a || f.arrivee >= a) && (!b || f.arrivee <= b)).sort((x, y) => (x.num || '').localeCompare(y.num || ''));
     if (!r.length) { toast('Aucune fiche sur cette période.'); return; }
-    const cols = [['num', 'N° fiche'], ['nom', 'Nom'], ['prenoms', 'Prénoms'], ['sexe', 'Sexe'], ['dateNaiss', 'Date de naissance'], ['lieuNaiss', 'Lieu de naissance'], ['nationalite', 'Nationalité'], ['profession', 'Profession'], ['tel', 'Téléphone'], ['paysRes', 'Pays de résidence'], ['adresse', 'Adresse'], ['typePiece', 'Nature pièce'], ['numPiece', 'N° pièce'], ['dateDeliv', 'Délivrée le'], ['lieuDeliv', 'Lieu délivrance'], ['dateExp', 'Expiration'], ['venantDe', 'Venant de'], ['allantA', 'Se rend à'], ['arrivee', 'Arrivée'], ['heureArr', 'Heure'], ['depart', 'Départ prévu'], ['departEffectif', 'Départ effectif'], ['nuits', 'Nuitées'], ['nbPers', 'Personnes'], ['chambre', 'Chambre'], ['tarif', 'Tarif/nuit'], ['total', 'Montant'], ['transport', 'Transport'], ['immat', 'Véhicule'], ['recep', 'Réceptionniste'], ['statut', 'Statut']];
+    const cols = [['num', 'N° fiche'], ['nom', 'Nom'], ['prenoms', 'Prénoms'], ['sexe', 'Sexe'], ['dateNaiss', 'Date de naissance'], ['lieuNaiss', 'Lieu de naissance'], ['nationalite', 'Nationalité'], ['profession', 'Profession'], ['tel', 'Téléphone'], ['paysRes', 'Pays de résidence'], ['adresse', 'Adresse'], ['typePiece', 'Nature pièce'], ['numPiece', 'N° pièce'], ['dateDeliv', 'Délivrée le'], ['lieuDeliv', 'Lieu délivrance'], ['dateExp', 'Expiration'], ['venantDe', 'Venant de'], ['allantA', 'Se rend à'], ['arrivee', 'Arrivée'], ['heureArr', 'Heure'], ['depart', 'Départ prévu'], ['departEffectif', 'Départ effectif'], ['nuits', 'Nuitées'], ['nbPers', 'Personnes'], ['nbHommes', 'Hommes'], ['nbFemmes', 'Femmes'], ['chambre', 'Chambre'], ['categorie', 'Formule'], ['tarif', 'Tarif/nuit'], ['total', 'Montant'], ['transport', 'Transport'], ['immat', 'Véhicule'], ['recep', 'Réceptionniste'], ['statut', 'Statut']];
     const q = v => { v = String(v ?? ''); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const dates = ['dateNaiss', 'dateDeliv', 'dateExp', 'arrivee', 'depart', 'departEffectif'];
     const csv = '﻿' + [cols.map(c => c[1]).join(';'), ...r.map(f => cols.map(([k]) => q(dates.includes(k) ? dfr(f[k]) : f[k])).join(';'))].join('\r\n');

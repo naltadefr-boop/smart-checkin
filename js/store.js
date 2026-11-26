@@ -1,8 +1,12 @@
 // Stockage des fiches : mode local (IndexedDB, un appareil) ou mode partagé (Firebase).
 import { FIREBASE_CONFIG } from '../config.js';
 
-export const DEF_CFG = { nom: 'WELLNESS HÔTEL BAGJEM', adresse: '', ville: '', bp: '', tel: '', email: '', pin: '0000', tarifA: 12500, tarifB: 17500, tarifApp: 40000 };
+export const DEF_CFG = { nom: 'WELLNESS HÔTEL BAGJEM',
+  services: 'Hébergement, Restauration, Snack-Bar, Terrasse, Salon de coiffure, Bien-être (manucure, pédicure, hammam, hydrothérapie, kinésithérapie, massage, gommage), Salle de sport',
+  adresse: 'à côté du Commissariat du 3ème, au Marché Tsinfem', ville: 'Dschang', bp: '', tel: '697 94 59 37 / 652 95 34 99 / 691 51 55 97 / 699 10 35 93 / 674 63 06 36', email: '',
+  region: 'Ouest', departement: 'Menoua', arrondissement: 'Dschang', pin: '0000', tarifA: 12500, tarifAsans: 10000, tarifB: 17500, tarifBsans: 15000, tarifApp: 40000 };
 const clone = o => JSON.parse(JSON.stringify(o || {}));
+const withDef = c => { const r = { ...DEF_CFG }; for (const [k, v] of Object.entries(c || {})) if (v !== '' && v != null) r[k] = v; else if (!(k in DEF_CFG)) r[k] = v; return r; };
 
 /* ---------- IndexedDB minimal ---------- */
 let dbP = null;
@@ -40,7 +44,7 @@ let fb = null, auth = null, fs = null, unsubs = [];
 export async function initStore() {
   // valeurs locales d'abord (affichage immédiat, même hors ligne)
   try {
-    store.cfg = { ...DEF_CFG, ...((await kvGet('cfg')) || {}) };
+    store.cfg = withDef((await kvGet('cfg')) || {});
     store.logo = (await kvGet('logo')) || '';
     if (store.mode === 'local') store.fiches = (await req('fiches', 'readonly', s => s.getAll())) || [];
   } catch (e) { console.warn('IndexedDB indisponible', e); }
@@ -70,7 +74,7 @@ function subscribe() {
     emit('data');
   }, e => { console.error(e); setSync(false, "Accès refusé : ce compte n'est pas autorisé par l'administrateur"); }));
   unsubs.push(fb.onSnapshot(fb.doc(fs, 'config', 'hotel'), s => {
-    if (s.exists()) { store.cfg = { ...DEF_CFG, ...s.data() }; kvSet('cfg', store.cfg).catch(() => {}); emit('cfg'); }
+    if (s.exists()) { store.cfg = withDef(s.data()); kvSet('cfg', store.cfg).catch(() => {}); emit('cfg'); }
   }, () => {}));
   unsubs.push(fb.onSnapshot(fb.doc(fs, 'config', 'logo'), s => {
     const v = s.exists() ? String((s.data() || {}).data || '') : '';
